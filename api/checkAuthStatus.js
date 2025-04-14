@@ -31,13 +31,24 @@ module.exports = async (req, res) => {
       .once('value');
     
     if (!snapshot.exists()) {
-      res.status(404).json({ status: 'not_found' });
+      res.status(200).json({ status: 'not_found' });
       return;
     }
     
     const requests = snapshot.val();
     const requestKey = Object.keys(requests)[0];
     const authRequest = requests[requestKey];
+  
+    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+    if (authRequest.created_at < fiveMinutesAgo) {
+      await authRequestsRef.child(requestKey).update({
+        status: 'expired',
+        completed_at: Date.now()
+      });
+      
+      res.status(200).json({ status: 'expired' });
+      return;
+    }
     
     if (authRequest.status === 'approved') {
       await authRequestsRef.child(requestKey).update({
