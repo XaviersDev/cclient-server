@@ -1,7 +1,7 @@
 {
   "name": "cclient-server",
   "version": "1.0.0",
-  "description": "Serverless functions for CClient mod using Firebase and Vercel",
+  "description": "ceylonclient",
   "main": "index.js",
   "scripts": {
     "start": "vercel dev"
@@ -10,6 +10,11 @@
   "author": "CLONERS",
   "license": "MIT",
   "dependencies": {
+    "mongodb": "^4.13.0",
+    "axios": "^1.3.4",
     "firebase-admin": "^13.0.2"
+  },
+  "devDependencies": {
+    "vercel": "^28.15.0"
   }
 }
