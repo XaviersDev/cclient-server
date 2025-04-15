@@ -1,5 +1,4 @@
 const admin = require('firebase-admin');
-
 if (!admin.apps.length) {
   const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   admin.initializeApp({
@@ -7,20 +6,24 @@ if (!admin.apps.length) {
     databaseURL: process.env.FIREBASE_URL
   });
 }
-
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
     return;
   }
+  
+  const { licenseKey, username, telegramId, apiPassword } = req.body;
 
-  const { licenseKey, username, telegramId } = req.body;
+  if (!apiPassword || apiPassword !== process.env.API_PASSWORD) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
   
   if (!licenseKey || !username || !telegramId) {
     res.status(400).json({ error: 'Missing required fields' });
     return;
   }
-
+  
   try {
     const db = admin.database();
     const licensesRef = db.ref('licenses');
