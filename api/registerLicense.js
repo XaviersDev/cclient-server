@@ -18,7 +18,7 @@ module.exports = async (req, res) => {
   console.log("Expected password:", process.env.API_PASSWORD);
   console.log("Match:", apiPassword === process.env.API_PASSWORD);
   
-  if (!apiPassword || apiPassword !== JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) {
+  if (!apiPassword || apiPassword !== JSON.parse(process.env.API_PASSWORD)) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
