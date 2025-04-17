@@ -13,7 +13,6 @@ module.exports = async (req, res) => {
   }
   
   const { licenseKey, username, telegramId, apiPassword } = req.body;
-
   console.log("Received password:", apiPassword);
   console.log("Expected password:", process.env.APIPASSWORD);
   console.log("Match:", apiPassword === process.env.APIPASSWORD);
