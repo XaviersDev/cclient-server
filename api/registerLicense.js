@@ -18,7 +18,7 @@ module.exports = async (req, res) => {
   console.log("Expected password:", process.env.APIPASSWORD);
   console.log("Match:", apiPassword === process.env.APIPASSWORD);
   
-  if (!apiPassword || apiPassword !== JSON.parse(process.env.APIPASSWORD)) {
+  if (!apiPassword || apiPassword !== process.env.APIPASSWORD) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
