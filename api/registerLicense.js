@@ -15,10 +15,10 @@ module.exports = async (req, res) => {
   const { licenseKey, username, telegramId, apiPassword } = req.body;
 
   console.log("Received password:", apiPassword);
-  console.log("Expected password:", process.env.API_PASSWORD);
-  console.log("Match:", apiPassword === process.env.API_PASSWORD);
+  console.log("Expected password:", process.env.APIPASSWORD);
+  console.log("Match:", apiPassword === process.env.APIPASSWORD);
   
-  if (!apiPassword || apiPassword !== JSON.parse(process.env.API_PASSWORD)) {
+  if (!apiPassword || apiPassword !== JSON.parse(process.env.APIPASSWORD)) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
