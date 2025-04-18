@@ -1,4 +1,5 @@
 const admin = require('firebase-admin');
+const fetch = require('node-fetch');
 
 if (!admin.apps.length) {
   const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -56,7 +57,27 @@ module.exports = async (req, res) => {
       status: 'pending'
     });
 
-    console.log('Auth request saved successfully:', { telegramId, requestId });
+    console.log('Auth request saved to Firebase:', { telegramId, requestId });
+
+    const botApiResponse = await fetch(`${process.env.TELEGRAM_URL}/api/saveAuthRequest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        telegramId,
+        username,
+        ip,
+        hwid,
+        requestId,
+        requestTime: Math.floor(Date.now() / 1000)
+      })
+    });
+
+    if (botApiResponse.ok) {
+      console.log('Auth USed bot API successfully');
+    } else {
+      console.error('Failed to send to bot API:', await botApiResponse.text());
+    }
+
     res.status(200).json({ success: true });
   } catch (error) {
     console.error('Error saving auth request:', error);
