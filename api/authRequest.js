@@ -16,6 +16,8 @@ module.exports = async (req, res) => {
 
   const { telegramId, username, ip, hwid, requestId } = req.body;
 
+  console.log('Received auth request:', { telegramId, username, ip, hwid, requestId });
+
   if (!telegramId || !username || !ip || !hwid || !requestId) {
     console.error('Missing fields:', { telegramId, username, ip, hwid, requestId });
     res.status(400).json({ error: 'Missing required fields' });
@@ -39,6 +41,7 @@ module.exports = async (req, res) => {
             status: 'expired',
             completed_at: Date.now()
           });
+          console.log('Expired old request:', key);
         }
       }
     }
@@ -53,10 +56,10 @@ module.exports = async (req, res) => {
       status: 'pending'
     });
 
-    console.log('Auth request saved:', { telegramId, requestId });
+    console.log('Auth request saved successfully:', { telegramId, requestId });
     res.status(200).json({ success: true });
   } catch (error) {
-    console.error('Error in authRequest:', error);
+    console.error('Error saving auth request:', error);
     res.status(500).json({ error: error.message });
   }
 };
