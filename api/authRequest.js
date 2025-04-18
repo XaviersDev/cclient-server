@@ -15,8 +15,9 @@ module.exports = async (req, res) => {
   }
 
   const { telegramId, username, ip, hwid, requestId } = req.body;
-  
+
   if (!telegramId || !username || !ip || !hwid || !requestId) {
+    console.error('Missing fields:', { telegramId, username, ip, hwid, requestId });
     res.status(400).json({ error: 'Missing required fields' });
     return;
   }
@@ -24,12 +25,12 @@ module.exports = async (req, res) => {
   try {
     const db = admin.database();
     const authRequestsRef = db.ref('authRequests');
-  
+
     const snapshot = await authRequestsRef
       .orderByChild('telegramId')
       .equalTo(telegramId)
       .once('value');
-    
+
     if (snapshot.exists()) {
       const requests = snapshot.val();
       for (const key in requests) {
@@ -41,7 +42,7 @@ module.exports = async (req, res) => {
         }
       }
     }
-    
+
     await authRequestsRef.push({
       telegramId,
       username,
@@ -51,7 +52,8 @@ module.exports = async (req, res) => {
       created_at: Date.now(),
       status: 'pending'
     });
-    
+
+    console.log('Auth request saved:', { telegramId, requestId });
     res.status(200).json({ success: true });
   } catch (error) {
     console.error('Error in authRequest:', error);
