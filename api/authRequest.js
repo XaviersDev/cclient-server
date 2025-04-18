@@ -24,6 +24,23 @@ module.exports = async (req, res) => {
   try {
     const db = admin.database();
     const authRequestsRef = db.ref('authRequests');
+  
+    const snapshot = await authRequestsRef
+      .orderByChild('telegramId')
+      .equalTo(telegramId)
+      .once('value');
+    
+    if (snapshot.exists()) {
+      const requests = snapshot.val();
+      for (const key in requests) {
+        if (requests[key].status === 'pending' || requests[key].status === 'sent') {
+          await authRequestsRef.child(key).update({
+            status: 'expired',
+            completed_at: Date.now()
+          });
+        }
+      }
+    }
     
     await authRequestsRef.push({
       telegramId,
@@ -37,6 +54,7 @@ module.exports = async (req, res) => {
     
     res.status(200).json({ success: true });
   } catch (error) {
+    console.error('Error in authRequest:', error);
     res.status(500).json({ error: error.message });
   }
 };
