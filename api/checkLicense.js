@@ -16,7 +16,7 @@ module.exports = async (req, res) => {
 
   const { licenseKey, username, ip, hwid } = req.body;
 
-  console.log('Checking license:', { licenseKey, username, ip, hwid });
+  console.log('Received license check:', { licenseKey, username, ip, hwid });
 
   if (!licenseKey || !username || !ip || !hwid) {
     console.error('Missing fields:', { licenseKey, username, ip, hwid });
@@ -39,35 +39,26 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const license = Object.values(snapshot.val())[0];
-    if (license.username !== username || license.isActive === false) {
-      console.error('Invalid license:', { licenseKey, username });
-      res.status(403).json({ error: 'Invalid license' });
+    const licenseData = Object.values(snapshot.val())[0];
+
+    if (licenseData.username !== username) {
+      console.error('Username mismatch:', { licenseUsername: licenseData.username, providedUsername: username });
+      res.status(403).json({ error: 'Username does not match license' });
       return;
     }
 
-    const authRequestsRef = db.ref('authRequests');
-    const authSnapshot = await authRequestsRef
-      .orderByChild('telegramId')
-      .equalTo(license.telegramId)
-      .limitToLast(1)
-      .once('value');
-
-    if (authSnapshot.exists()) {
-      const authRequest = Object.values(authSnapshot.val())[0];
-      if (authRequest.status === 'approved') {
-        console.log('License approved:', { licenseKey, telegramId: license.telegramId });
-        res.status(200).json({ success: true, telegramId: license.telegramId });
-        return;
-      } else if (authRequest.status === 'denied') {
-        console.log('License denied:', { licenseKey, telegramId: license.telegramId });
-        res.status(403).json({ error: 'License authorization denied' });
-        return;
-      }
+    if (!licenseData.isActive) {
+      console.error('License inactive:', licenseKey);
+      res.status(403).json({ error: 'License is inactive' });
+      return;
     }
 
-    console.log('No auth request found, requiring Telegram auth:', { licenseKey, telegramId: license.telegramId });
-    res.status(200).json({ success: true, telegramId: license.telegramId, requiresAuth: true });
+    console.log('License check successful:', { licenseKey, telegramId: licenseData.telegramId });
+
+    res.status(200).json({
+      success: true,
+      telegramId: licenseData.telegramId
+    });
   } catch (error) {
     console.error('Error checking license:', error);
     res.status(500).json({ error: error.message });
