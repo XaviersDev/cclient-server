@@ -16,10 +16,7 @@ module.exports = async (req, res) => {
 
   const { requestId, status } = req.body;
 
-  console.log('Received status update:', { requestId, status });
-
   if (!requestId || !status || !['approved', 'denied'].includes(status)) {
-    console.error('Missing or invalid fields:', { requestId, status });
     res.status(400).json({ error: 'Missing or invalid fields' });
     return;
   }
@@ -34,7 +31,6 @@ module.exports = async (req, res) => {
       .once('value');
 
     if (!snapshot.exists()) {
-      console.error('Request not found:', requestId);
       res.status(404).json({ error: 'Request not found' });
       return;
     }
@@ -45,10 +41,8 @@ module.exports = async (req, res) => {
       completed_at: Date.now()
     });
 
-    console.log('Updated auth request status:', { requestId, status });
-    res.status(200).json({ success: true });
+    res.status(200).json({ success: true, status });
   } catch (error) {
-    console.error('Error updating auth status:', error);
     res.status(500).json({ error: error.message });
   }
 };
