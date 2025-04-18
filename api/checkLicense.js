@@ -14,13 +14,13 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const { licenseKey, username, hwid } = req.body;
+  const { licenseKey, username, ip, hwid } = req.body;
 
-  console.log('Received license check:', { licenseKey, username, hwid });
+  console.log('Checking license:', { licenseKey, username, ip, hwid });
 
-  if (!licenseKey || !username || !hwid) {
-    console.error('Missing fields:', { licenseKey, username, hwid });
-    res.status(400).json({ valid: false, message: 'Missing required fields' });
+  if (!licenseKey || !username || !ip || !hwid) {
+    console.error('Missing fields:', { licenseKey, username, ip, hwid });
+    res.status(400).json({ error: 'Missing required fields' });
     return;
   }
 
@@ -34,42 +34,42 @@ module.exports = async (req, res) => {
       .once('value');
 
     if (!snapshot.exists()) {
-      console.log('License not found:', licenseKey);
-      res.status(404).json({ valid: false, message: 'Неверный лицензионный ключ' });
+      console.error('License not found:', licenseKey);
+      res.status(404).json({ error: 'License not found' });
       return;
     }
 
-    const licenses = snapshot.val();
-    const licenseId = Object.keys(licenses)[0];
-    const license = licenses[licenseId];
-
-    console.log('Found license:', { licenseId, license });
-
-    if (license.username !== username) {
-      console.log('Username mismatch:', { licenseUsername: license.username, providedUsername: username });
-      res.status(403).json({ valid: false, message: 'Ключ привязан к другому пользователю' });
+    const license = Object.values(snapshot.val())[0];
+    if (license.username !== username || license.isActive === false) {
+      console.error('Invalid license:', { licenseKey, username });
+      res.status(403).json({ error: 'Invalid license' });
       return;
     }
 
-    if (license.active_hwid && license.active_hwid !== hwid) {
-      console.log('HWID mismatch:', { licenseHwid: license.active_hwid, providedHwid: hwid });
-      res.status(403).json({ valid: false, message: 'Вы уже играете на другом компьютере!' });
-      return;
+    const authRequestsRef = db.ref('authRequests');
+    const authSnapshot = await authRequestsRef
+      .orderByChild('telegramId')
+      .equalTo(license.telegramId)
+      .limitToLast(1)
+      .once('value');
+
+    if (authSnapshot.exists()) {
+      const authRequest = Object.values(authSnapshot.val())[0];
+      if (authRequest.status === 'approved') {
+        console.log('License approved:', { licenseKey, telegramId: license.telegramId });
+        res.status(200).json({ success: true, telegramId: license.telegramId });
+        return;
+      } else if (authRequest.status === 'denied') {
+        console.log('License denied:', { licenseKey, telegramId: license.telegramId });
+        res.status(403).json({ error: 'License authorization denied' });
+        return;
+      }
     }
 
-    await licensesRef.child(licenseId).update({
-      last_login: Date.now(),
-      active_hwid: hwid
-    });
-
-    console.log('License validated, returning telegramId:', license.telegramId);
-    res.status(200).json({
-      valid: true,
-      telegramId: license.telegramId,
-      message: 'Лицензия проверена'
-    });
+    console.log('No auth request found, requiring Telegram auth:', { licenseKey, telegramId: license.telegramId });
+    res.status(200).json({ success: true, telegramId: license.telegramId, requiresAuth: true });
   } catch (error) {
-    console.error('Error in checkLicense:', error);
-    res.status(500).json({ valid: false, message: error.message });
+    console.error('Error checking license:', error);
+    res.status(500).json({ error: error.message });
   }
 };
