@@ -38,36 +38,27 @@ module.exports = async (req, res) => {
     const requests = snapshot.val();
     const requestKey = Object.keys(requests)[0];
     const authRequest = requests[requestKey];
-  
+    
     const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-    if (authRequest.created_at < fiveMinutesAgo) {
+    if (authRequest.created_at < fiveMinutesAgo && authRequest.status !== 'approved' && authRequest.status !== 'denied') {
       await authRequestsRef.child(requestKey).update({
         status: 'expired',
         completed_at: Date.now()
       });
-      
       res.status(200).json({ status: 'expired' });
       return;
     }
     
-    if (authRequest.status === 'approved') {
+    if (authRequest.status === 'approved' || authRequest.status === 'denied') {
       await authRequestsRef.child(requestKey).update({
         status: 'completed',
         completed_at: Date.now()
       });
-      
-      res.status(200).json({ status: 'approved' });
-    } else if (authRequest.status === 'denied') {
-      await authRequestsRef.child(requestKey).update({
-        status: 'completed',
-        completed_at: Date.now()
-      });
-      
-      res.status(200).json({ status: 'denied' });
-    } else {
-      res.status(200).json({ status: 'pending' });
     }
+    
+    res.status(200).json({ status: authRequest.status });
   } catch (error) {
+    console.error('Error in checkAuthStatus:', error);
     res.status(500).json({ error: error.message });
   }
 };
