@@ -20,54 +20,59 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const db = admin.firestore();
+    const db = admin.database();
+
     
-    
-    const accessCodeDoc = await db.collection('accessCodes').doc(accessCode).get();
-    
-    if (!accessCodeDoc.exists) {
-      return res.status(404).json({ 
+    const accessCodeSnapshot = await db.ref(`accessCodes/${accessCode}`).once('value');
+
+    if (!accessCodeSnapshot.exists()) {
+      return res.status(404).json({
         isLinked: false,
         hasSubscription: false,
-        message: 'Access code not found' 
+        message: 'Access code not found'
       });
     }
-    
-    const accessCodeData = accessCodeDoc.data();
-    
+
+    const accessCodeData = accessCodeSnapshot.val();
+
     
     if (accessCodeData.hwid !== hwid) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         isLinked: false,
         hasSubscription: false,
-        message: 'Access code is linked to a different device' 
+        message: 'Access code is linked to a different device'
       });
     }
-    
+
     
     if (!accessCodeData.isLinked || !accessCodeData.telegramId) {
-      return res.status(200).json({ 
+      return res.status(200).json({
         isLinked: false,
         hasSubscription: false,
-        message: 'Access code not linked to Telegram' 
+        message: 'Access code not linked to Telegram'
       });
     }
+
     
-    
-    const subscriptionsSnapshot = await db.collection('subscriptions')
-      .where('telegramId', '==', accessCodeData.telegramId)
-      .where('endTime', '>', Date.now())
-      .limit(1)
-      .get();
-    
-    const hasSubscription = !subscriptionsSnapshot.empty;
+    const subscriptionsSnapshot = await db.ref('subscriptions')
+      .orderByChild('telegramId')
+      .equalTo(accessCodeData.telegramId)
+      .once('value');
+
+    let hasSubscription = false;
     let subscriptionEndTime = 0;
-    
-    if (hasSubscription) {
-      subscriptionEndTime = subscriptionsSnapshot.docs[0].data().endTime;
+
+    if (subscriptionsSnapshot.exists()) {
+      subscriptionsSnapshot.forEach(child => {
+        const subscription = child.val();
+        if (subscription.endTime > Date.now()) {
+          hasSubscription = true;
+          subscriptionEndTime = subscription.endTime;
+        }
+      });
     }
-    
-    res.status(200).json({ 
+
+    res.status(200).json({
       isLinked: true,
       telegramId: accessCodeData.telegramId,
       hasSubscription: hasSubscription,
