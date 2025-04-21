@@ -21,42 +21,35 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const db = admin.firestore();
-    
-    
+    const db = admin.database();
     const accessCode = generateNumericCode(8);
     const formattedCode = `${accessCode.substring(0,2)}-${accessCode.substring(2,4)}-${accessCode.substring(4,6)}-${accessCode.substring(6,8)}`;
+
     
-    
-    const hwidSnapshot = await db.collection('accessCodes')
-      .where('hwid', '==', hwid)
-      .limit(1)
-      .get();
-    
-    if (!hwidSnapshot.empty) {
-      
-      const doc = hwidSnapshot.docs[0];
+    const hwidSnapshot = await db.ref('accessCodes')
+      .orderByChild('hwid')
+      .equalTo(hwid)
+      .once('value');
+
+    if (hwidSnapshot.exists()) {
+      const accessCodeData = Object.values(hwidSnapshot.val())[0];
       return res.status(200).json({ 
-        accessCode: doc.data().code,
+        accessCode: accessCodeData.code,
         message: 'Existing code retrieved' 
       });
     }
+
     
-    
-    await db.collection('accessCodes').doc(accessCode).set({
+    await db.ref(`accessCodes/${accessCode}`).set({
       code: accessCode,
       hwid: hwid,
       ip: ip || 'unknown',
-      created: admin.firestore.FieldValue.serverTimestamp(),
+      created: admin.database.ServerValue.TIMESTAMP,
       isLinked: false,
       telegramId: null
     });
 
     console.log(`New access code generated: ${formattedCode}`);
-    
-    
-    
-    
     res.status(200).json({ 
       accessCode: accessCode,
       message: 'New access code generated' 
