@@ -14,28 +14,29 @@ module.exports = async (req, res) => {
   }
 
   const { accessCode, telegramId } = req.body;
-  
+
   if (!accessCode || !telegramId) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   try {
-    const db = admin.firestore();
+    const db = admin.database();
+
     
-    const accessCodeDoc = await db.collection('accessCodes').doc(accessCode).get();
-    
-    if (!accessCodeDoc.exists) {
+    const accessCodeSnapshot = await db.ref(`accessCodes/${accessCode}`).once('value');
+
+    if (!accessCode(snapshot.exists()) {
       return res.status(404).json({ success: false, message: 'Access code not found' });
     }
+
     
-    
-    await db.collection('userLogs').add({
+    await db.ref('userLogs').push({
       type: 'logout',
       accessCode,
       telegramId,
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
+      timestamp: admin.database.ServerValue.TIMESTAMP
     });
-    
+
     res.status(200).json({ success: true });
   } catch (error) {
     console.error('Error logging out user:', error);
