@@ -21,34 +21,37 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const db = admin.firestore();
+    const db = admin.database();
+
     
-    
-    const oldRequestsSnapshot = await db.collection('authRequests')
-      .where('telegramId', '==', telegramId)
-      .where('status', 'in', ['pending', 'sent'])
-      .get();
-    
-    const batch = db.batch();
-    oldRequestsSnapshot.forEach(doc => {
-      batch.update(doc.ref, { 
-        status: 'expired',
-        completedAt: admin.firestore.FieldValue.serverTimestamp() 
+    const oldRequestsSnapshot = await db.ref('authRequests')
+      .orderByChild('telegramId')
+      .equalTo(telegramId)
+      .once('value');
+
+    if (oldRequestsSnapshot.exists()) {
+      const updates = {};
+      oldRequestsSnapshot.forEach(child => {
+        const request = child.val();
+        if (request.status === 'pending' || request.status === 'sent') {
+          updates[`authRequests/${child.key}/status`] = 'expired';
+          updates[`authRequests/${child.key}/completedAt`] = admin.database.ServerValue.TIMESTAMP;
+        }
       });
-    });
-    await batch.commit();
+      await db.ref().update(updates);
+    }
+
     
-    
-    await db.collection('authRequests').doc(requestId).set({
+    await db.ref(`authRequests/${requestId}`).set({
       telegramId,
       accessCode,
       ip: ip || 'unknown',
       hwid,
       requestId,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: admin.database.ServerValue.TIMESTAMP,
       status: 'pending'
     });
-    
+
     
     const botApiResponse = await fetch(`${process.env.TELEGRAM_URL}/api/saveAuthRequest`, {
       method: 'POST',
@@ -62,11 +65,11 @@ module.exports = async (req, res) => {
         requestTime: Math.floor(Date.now() / 1000)
       })
     });
-    
+
     if (!botApiResponse.ok) {
       console.error('Failed to send to bot API:', await botApiResponse.text());
     }
-    
+
     res.status(200).json({ success: true });
   } catch (error) {
     console.error('Error creating auth request:', error);
