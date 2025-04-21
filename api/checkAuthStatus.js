@@ -10,55 +10,49 @@ if (!admin.apps.length) {
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET') {
-    res.status(405).send('Method Not Allowed');
-    return;
+    return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
   const { requestId } = req.query;
   
   if (!requestId) {
-    res.status(400).json({ error: 'Missing requestId parameter' });
-    return;
+    return res.status(400).json({ error: 'Missing requestId parameter' });
   }
 
   try {
-    const db = admin.database();
-    const authRequestsRef = db.ref('authRequests');
+    const db = admin.firestore();
     
-    const snapshot = await authRequestsRef
-      .orderByChild('requestId')
-      .equalTo(requestId)
-      .once('value');
+    const authRequestDoc = await db.collection('authRequests').doc(requestId).get();
     
-    if (!snapshot.exists()) {
-      res.status(200).json({ status: 'not_found' });
-      return;
+    if (!authRequestDoc.exists) {
+      return res.status(200).json({ status: 'not_found' });
     }
     
-    const requests = snapshot.val();
-    const requestKey = Object.keys(requests)[0];
-    const authRequest = requests[requestKey];
+    const authRequest = authRequestDoc.data();
     
-    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-    if (authRequest.created_at < fiveMinutesAgo && authRequest.status !== 'approved' && authRequest.status !== 'denied') {
-      await authRequestsRef.child(requestKey).update({
+    
+    const createdAt = authRequest.createdAt?.toDate?.() || new Date(authRequest.createdAt);
+    const fiveMinutesAgo = new Date(Date.now() - (5 * 60 * 1000));
+    
+    if (createdAt < fiveMinutesAgo && authRequest.status !== 'approved' && authRequest.status !== 'denied') {
+      await db.collection('authRequests').doc(requestId).update({
         status: 'expired',
-        completed_at: Date.now()
+        completedAt: admin.firestore.FieldValue.serverTimestamp()
       });
-      res.status(200).json({ status: 'expired' });
-      return;
+      return res.status(200).json({ status: 'expired' });
     }
+    
     
     if (authRequest.status === 'approved' || authRequest.status === 'denied') {
-      await authRequestsRef.child(requestKey).update({
+      await db.collection('authRequests').doc(requestId).update({
         status: 'completed',
-        completed_at: Date.now()
+        completedAt: admin.firestore.FieldValue.serverTimestamp()
       });
     }
     
     res.status(200).json({ status: authRequest.status });
   } catch (error) {
-    console.error('Error in checkAuthStatus:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Error checking auth status:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
