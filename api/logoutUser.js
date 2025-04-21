@@ -10,47 +10,35 @@ if (!admin.apps.length) {
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
-    res.status(405).send('Method Not Allowed');
-    return;
+    return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { licenseKey, username } = req.body;
+  const { accessCode, telegramId } = req.body;
   
-  if (!licenseKey || !username) {
-    res.status(400).json({ error: 'Missing required fields' });
-    return;
+  if (!accessCode || !telegramId) {
+    return res.status(400).json({ error: 'Missing required fields' });
   }
 
   try {
-    const db = admin.database();
-    const licensesRef = db.ref('licenses');
+    const db = admin.firestore();
     
-    const snapshot = await licensesRef
-      .orderByChild('licenseKey')
-      .equalTo(licenseKey)
-      .once('value');
+    const accessCodeDoc = await db.collection('accessCodes').doc(accessCode).get();
     
-    if (!snapshot.exists()) {
-      res.status(404).json({ success: false, message: 'Лицензия не найдена' });
-      return;
+    if (!accessCodeDoc.exists) {
+      return res.status(404).json({ success: false, message: 'Access code not found' });
     }
     
-    const licenses = snapshot.val();
-    const licenseId = Object.keys(licenses)[0];
-    const license = licenses[licenseId];
     
-    if (license.username !== username) {
-      res.status(403).json({ success: false, message: 'Неверный пользователь' });
-      return;
-    }
-    
-    await licensesRef.child(licenseId).update({
-      active_hwid: null,
-      last_logout: Date.now()
+    await db.collection('userLogs').add({
+      type: 'logout',
+      accessCode,
+      telegramId,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
     
     res.status(200).json({ success: true });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error logging out user:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
