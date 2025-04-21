@@ -22,6 +22,7 @@ module.exports = async (req, res) => {
 
   try {
     const db = admin.database();
+
     const accessCode = generateNumericCode(8);
     const formattedCode = `${accessCode.substring(0,2)}-${accessCode.substring(2,4)}-${accessCode.substring(4,6)}-${accessCode.substring(6,8)}`;
 
@@ -33,9 +34,9 @@ module.exports = async (req, res) => {
 
     if (hwidSnapshot.exists()) {
       const accessCodeData = Object.values(hwidSnapshot.val())[0];
-      return res.status(200).json({ 
+      return res.status(200).json({
         accessCode: accessCodeData.code,
-        message: 'Existing code retrieved' 
+        message: 'Existing code retrieved'
       });
     }
 
@@ -50,9 +51,9 @@ module.exports = async (req, res) => {
     });
 
     console.log(`New access code generated: ${formattedCode}`);
-    res.status(200).json({ 
+    res.status(200).json({
       accessCode: accessCode,
-      message: 'New access code generated' 
+      message: 'New access code generated'
     });
   } catch (error) {
     console.error('Error generating access code:', error);
