@@ -14,42 +14,43 @@ module.exports = async (req, res) => {
   }
 
   const { requestId } = req.query;
-  
+
   if (!requestId) {
     return res.status(400).json({ error: 'Missing requestId parameter' });
   }
 
   try {
-    const db = admin.firestore();
+    const db = admin.database();
+
     
-    const authRequestDoc = await db.collection('authRequests').doc(requestId).get();
-    
-    if (!authRequestDoc.exists) {
+    const authRequestSnapshot = await db.ref(`authRequests/${requestId}`).once('value');
+
+    if (!authRequestSnapshot.exists()) {
       return res.status(200).json({ status: 'not_found' });
     }
+
+    const authRequest = authRequestSnapshot.val();
+
     
-    const authRequest = authRequestDoc.data();
-    
-    
-    const createdAt = authRequest.createdAt?.toDate?.() || new Date(authRequest.createdAt);
-    const fiveMinutesAgo = new Date(Date.now() - (5 * 60 * 1000));
-    
+    const createdAt = authRequest.createdAt || Date.now();
+    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+
     if (createdAt < fiveMinutesAgo && authRequest.status !== 'approved' && authRequest.status !== 'denied') {
-      await db.collection('authRequests').doc(requestId).update({
+      await db.ref(`authRequests/${requestId}`).update({
         status: 'expired',
-        completedAt: admin.firestore.FieldValue.serverTimestamp()
+        completedAt: admin.database.ServerValue.TIMESTAMP
       });
       return res.status(200).json({ status: 'expired' });
     }
-    
+
     
     if (authRequest.status === 'approved' || authRequest.status === 'denied') {
-      await db.collection('authRequests').doc(requestId).update({
+      await db.ref(`authRequests/${requestId}`).update({
         status: 'completed',
-        completedAt: admin.firestore.FieldValue.serverTimestamp()
+        completedAt: admin.database.ServerValue.TIMESTAMP
       });
     }
-    
+
     res.status(200).json({ status: authRequest.status });
   } catch (error) {
     console.error('Error checking auth status:', error);
