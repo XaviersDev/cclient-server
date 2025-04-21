@@ -20,19 +20,21 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const db = admin.firestore();
+    const db = admin.database();
+
     
-    const authRequestDoc = await db.collection('authRequests').doc(requestId).get();
-    
-    if (!authRequestDoc.exists) {
+    const authRequestSnapshot = await db.ref(`authRequests/${requestId}`).once('value');
+
+    if (!authRequestSnapshot.exists()) {
       return res.status(404).json({ error: 'Request not found' });
     }
+
     
-    await db.collection('authRequests').doc(requestId).update({
+    await db.ref(`authRequests/${requestId}`).update({
       status,
-      completedAt: admin.firestore.FieldValue.serverTimestamp()
+      completedAt: admin.database.ServerValue.TIMESTAMP
     });
-    
+
     res.status(200).json({ success: true, status });
   } catch (error) {
     console.error('Error updating auth status:', error);
