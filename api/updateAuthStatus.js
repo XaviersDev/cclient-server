@@ -10,39 +10,32 @@ if (!admin.apps.length) {
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
-    res.status(405).send('Method Not Allowed');
-    return;
+    return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
   const { requestId, status } = req.body;
 
   if (!requestId || !status || !['approved', 'denied'].includes(status)) {
-    res.status(400).json({ error: 'Missing or invalid fields' });
-    return;
+    return res.status(400).json({ error: 'Missing or invalid fields' });
   }
 
   try {
-    const db = admin.database();
-    const authRequestsRef = db.ref('authRequests');
-
-    const snapshot = await authRequestsRef
-      .orderByChild('requestId')
-      .equalTo(requestId)
-      .once('value');
-
-    if (!snapshot.exists()) {
-      res.status(404).json({ error: 'Request not found' });
-      return;
+    const db = admin.firestore();
+    
+    const authRequestDoc = await db.collection('authRequests').doc(requestId).get();
+    
+    if (!authRequestDoc.exists) {
+      return res.status(404).json({ error: 'Request not found' });
     }
-
-    const requestKey = Object.keys(snapshot.val())[0];
-    await authRequestsRef.child(requestKey).update({
+    
+    await db.collection('authRequests').doc(requestId).update({
       status,
-      completed_at: Date.now()
+      completedAt: admin.firestore.FieldValue.serverTimestamp()
     });
-
+    
     res.status(200).json({ success: true, status });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error updating auth status:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
