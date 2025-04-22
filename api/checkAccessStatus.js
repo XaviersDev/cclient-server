@@ -21,8 +21,6 @@ module.exports = async (req, res) => {
 
   try {
     const db = admin.database();
-
-    
     const accessCodeSnapshot = await db.ref(`accessCodes/${accessCode}`).once('value');
 
     if (!accessCodeSnapshot.exists()) {
@@ -35,7 +33,6 @@ module.exports = async (req, res) => {
 
     const accessCodeData = accessCodeSnapshot.val();
 
-    
     if (accessCodeData.hwid !== hwid) {
       return res.status(403).json({
         isLinked: false,
@@ -44,7 +41,6 @@ module.exports = async (req, res) => {
       });
     }
 
-    
     if (!accessCodeData.isLinked || !accessCodeData.telegramId) {
       return res.status(200).json({
         isLinked: false,
@@ -53,7 +49,6 @@ module.exports = async (req, res) => {
       });
     }
 
-    
     const subscriptionsSnapshot = await db.ref('subscriptions')
       .orderByChild('telegramId')
       .equalTo(accessCodeData.telegramId)
@@ -75,6 +70,7 @@ module.exports = async (req, res) => {
     res.status(200).json({
       isLinked: true,
       telegramId: accessCodeData.telegramId,
+      linkedUsername: accessCodeData.linkedUsername || 'Unknown',
       hasSubscription: hasSubscription,
       subscriptionEndTime: subscriptionEndTime,
       message: hasSubscription ? 'Access code valid with active subscription' : 'No active subscription'
