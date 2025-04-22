@@ -28,7 +28,7 @@ module.exports = async (req, res) => {
           return res.status(200).json({ status: 'not_found' });
         }
         const authRequest = authRequestSnapshot.val();
-        const createdAt = authRequest.createdAt || Date.now();
+        const createdAt = authRequest.requestTime * 1000 || Date.now();
         const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
         if (createdAt < fiveMinutesAgo && authRequest.status !== 'approved' && authRequest.status !== 'denied') {
           await db.ref(`authRequests/${requestId}`).update({
@@ -129,6 +129,7 @@ module.exports = async (req, res) => {
             hwid,
             requestId,
             createdAt: admin.database.ServerValue.TIMESTAMP,
+            requestTime: Math.floor(Date.now() / 1000),
             status: 'pending'
           });
           await fetch(`${process.env.TELEGRAM_URL}/api/saveAuthRequest`, {
