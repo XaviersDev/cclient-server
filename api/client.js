@@ -1,11 +1,10 @@
 const admin = require('firebase-admin');
 const fetch = require('node-fetch');
-const fs = require('fs');
 
 if (!admin.apps.length) {
   const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   admin.initializeApp({
-тих    credential: admin.credential.cert(serviceAccount),
+    credential: admin.credential.cert(serviceAccount),
     databaseURL: process.env.FIREBASE_URL
   });
 }
@@ -19,69 +18,42 @@ function generateNumericCode(length) {
 }
 
 module.exports = async (req, res) => {
-  const log = (message, data = {}) => {
-    const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] ${message} ${JSON.stringify(data)}\n`;
-    fs.appendFileSync('client.log', logEntry);
-    console.log(logEntry);
-  };
-
-  log('Received request', { method: req.method, query: req.query, body: req.body });
-
   try {
     if (req.method === 'GET') {
       const { requestId } = req.query;
       if (requestId) {
         const db = admin.database();
-        log('Checking auth request status', { requestId });
         const authRequestSnapshot = await db.ref(`authRequests/${requestId}`).once('value');
         if (!authRequestSnapshot.exists()) {
-          log('Auth request not found', { requestId });
           return res.status(200).json({ status: 'not_found' });
         }
         const authRequest = authRequestSnapshot.val();
-        const createdAt = authRequest.requestTime * 1000 || Date.now();
+        const createdAt = authRequest.createdAt || Date.now();
         const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
         if (createdAt < tenMinutesAgo && authRequest.status !== 'approved' && authRequest.status !== 'denied') {
-          log('Auth request expired', { requestId, createdAt });
           await db.ref(`authRequests/${requestId}`).update({
             status: 'expired',
             completedAt: admin.database.ServerValue.TIMESTAMP
           });
           return res.status(200).json({ status: 'expired' });
         }
-        if (authRequest.status === 'approved' || authRequest.status === 'denied') {
-          log('Auth request completed', { requestId, status: authRequest.status });
-          await db.ref(`authRequests/${requestId}`).update({
-            status: 'completed',
-            completedAt: admin.database.ServerValue.TIMESTAMP
-          });
-        }
-        log('Returning auth request status', { requestId, status: authRequest.status });
         res.status(200).json({ status: authRequest.status });
       } else {
-        log('Missing requestId for GET request');
         res.status(400).json({ error: 'Missing requestId' });
       }
     } else if (req.method === 'POST') {
       const { action } = req.body;
       const db = admin.database();
-      log('Processing POST action', { action });
       switch (action) {
         case 'generateAccessCode': {
           const { hwid, ip } = req.body;
-          if (!hwid) {
-            log('Missing required fields for generateAccessCode', { hwid, ip });
-            return res.status(400).json({ error: 'Missing required fields' });
-          }
+          if (!hwid) return res.status(400).json({ error: 'Missing required fields' });
           const accessCode = generateNumericCode(8);
           const hwidSnapshot = await db.ref('accessCodes').orderByChild('hwid').equalTo(hwid).once('value');
           if (hwidSnapshot.exists()) {
             const accessCodeData = Object.values(hwidSnapshot.val())[0];
-            log('Retrieved existing access code', { hwid, accessCode: accessCodeData.code });
             return res.status(200).json({ accessCode: accessCodeData.code, message: 'Existing code retrieved' });
           }
-          log('Generating new access code', { accessCode, hwid, ip });
           await db.ref(`accessCodes/${accessCode}`).set({
             code: accessCode,
             hwid: hwid,
@@ -90,28 +62,21 @@ module.exports = async (req, res) => {
             isLinked: false,
             telegramId: null
           });
-          log('New access code generated', { accessCode });
           res.status(200).json({ accessCode: accessCode, message: 'New access code generated' });
           break;
         }
         case 'checkAccessStatus': {
           const { accessCode, hwid } = req.body;
-          if (!accessCode || !hwid) {
-            log('Missing required fields for checkAccessStatus', { accessCode, hwid });
-            return res.status(400).json({ error: 'Missing required fields' });
-          }
+          if (!accessCode || !hwid) return res.status(400).json({ error: 'Missing required fields' });
           const accessCodeSnapshot = await db.ref(`accessCodes/${accessCode}`).once('value');
           if (!accessCodeSnapshot.exists()) {
-            log('Access code not found', { accessCode });
             return res.status(404).json({ isLinked: false, hasSubscription: false, message: 'Access code not found' });
           }
           const accessCodeData = accessCodeSnapshot.val();
           if (accessCodeData.hwid !== hwid) {
-            log('HWID mismatch', { accessCode, hwid, storedHwid: accessCodeData.hwid });
             return res.status(403).json({ isLinked: false, hasSubscription: false, message: 'Access code is linked to a different device' });
           }
           if (!accessCodeData.isLinked || !accessCodeData.telegramId) {
-            log('Access code not linked', { accessCode });
             return res.status(200).json({ isLinked: false, hasSubscription: false, message: 'Access code not linked to Telegram' });
           }
           const subscriptionsSnapshot = await db.ref('subscriptions').orderByChild('telegramId').equalTo(accessCodeData.telegramId).once('value');
@@ -126,7 +91,6 @@ module.exports = async (req, res) => {
               }
             });
           }
-          log('Access status checked', { accessCode, isLinked: true, hasSubscription, subscriptionEndTime });
           res.status(200).json({
             isLinked: true,
             telegramId: accessCodeData.telegramId,
@@ -139,10 +103,7 @@ module.exports = async (req, res) => {
         }
         case 'authRequest': {
           const { telegramId, accessCode, ip, hwid, requestId } = req.body;
-          if (!telegramId || !accessCode || !hwid || !requestId) {
-            log('Missing required fields for authRequest', { telegramId, accessCode, ip, hwid, requestId });
-            return res.status(400).json({ error: 'Missing required fields' });
-          }
+          if (!telegramId || !accessCode || !hwid || !requestId) return res.status(400).json({ error: 'Missing required fields' });
           const oldRequestsSnapshot = await db.ref('authRequests').orderByChild('telegramId').equalTo(telegramId).once('value');
           if (oldRequestsSnapshot.exists()) {
             const updates = {};
@@ -153,10 +114,8 @@ module.exports = async (req, res) => {
                 updates[`authRequests/${child.key}/completedAt`] = admin.database.ServerValue.TIMESTAMP;
               }
             });
-            log('Expiring old auth requests', { telegramId, updates });
             await db.ref().update(updates);
           }
-          log('Creating new auth request', { requestId, telegramId, accessCode, ip, hwid });
           await db.ref(`authRequests/${requestId}`).set({
             telegramId,
             accessCode,
@@ -164,109 +123,71 @@ module.exports = async (req, res) => {
             hwid,
             requestId,
             createdAt: admin.database.ServerValue.TIMESTAMP,
-            requestTime: Math.floor(Date.now() / 1000),
             status: 'pending'
           });
-          log('Sending auth request to Telegram', { requestId });
           await fetch(`${process.env.TELEGRAM_URL}/api/saveAuthRequest`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ telegramId, accessCode, ip: ip || 'unknown', hwid, requestId, requestTime: Math.floor(Date.now() / 1000) })
           });
-          log('Auth request sent successfully', { requestId });
           res.status(200).json({ success: true });
           break;
         }
         case 'logoutUser': {
           const { accessCode, telegramId } = req.body;
-          if (!accessCode || !telegramId) {
-            log('Missing required fields for logoutUser', { accessCode, telegramId });
-            return res.status(400).json({ error: 'Missing required fields' });
-          }
+          if (!accessCode || !telegramId) return res.status(400).json({ error: 'Missing required fields' });
           const accessCodeSnapshot = await db.ref(`accessCodes/${accessCode}`).once('value');
-          if (!accessCodeSnapshot.exists()) {
-            log('Access code not found for logout', { accessCode });
-            return res.status(404).json({ success: false, message: 'Access code not found' });
-          }
-          log('Logging out user', { accessCode, telegramId });
+          if (!accessCodeSnapshot.exists()) return res.status(404).json({ success: false, message: 'Access code not found' });
           await db.ref('userLogs').push({
             type: 'logout',
             accessCode,
             telegramId,
             timestamp: admin.database.ServerValue.TIMESTAMP
           });
-          log('User logged out successfully', { accessCode, telegramId });
           res.status(200).json({ success: true });
           break;
         }
         case 'unlinkAccessCode': {
           const { accessCode, hwid } = req.body;
-          if (!accessCode || !hwid) {
-            log('Missing required fields for unlinkAccessCode', { accessCode, hwid });
-            return res.status(400).json({ error: 'Missing required fields' });
-          }
+          if (!accessCode || !hwid) return res.status(400).json({ error: 'Missing required fields' });
           const accessCodeSnapshot = await db.ref(`accessCodes/${accessCode}`).once('value');
-          if (!accessCodeSnapshot.exists()) {
-            log('Access code not found for unlink', { accessCode });
-            return res.status(404).json({ success: false, message: 'Access code not found' });
-          }
+          if (!accessCodeSnapshot.exists()) return res.status(404).json({ success: false, message: 'Access code not found' });
           const accessCodeData = accessCodeSnapshot.val();
-          if (accessCodeData.hwid !== hwid) {
-            log('HWID mismatch for unlink', { accessCode, hwid, storedHwid: accessCodeData.hwid });
-            return res.status(403).json({ success: false, message: 'HWID mismatch' });
-          }
-          log('Unlinking access code', { accessCode });
+          if (accessCodeData.hwid !== hwid) return res.status(403).json({ success: false, message: 'HWID mismatch' });
           await db.ref(`accessCodes/${accessCode}`).update({
             isLinked: false,
             telegramId: null,
             linkedUsername: null
           });
-          log('Access code unlinked successfully', { accessCode });
           res.status(200).json({ success: true });
           break;
         }
         case 'checkLicense': {
           const { licenseKey, username, hwid } = req.body;
-          if (!licenseKey || !username || !hwid) {
-            log('Missing required fields for checkLicense', { licenseKey, username, hwid });
-            return res.status(400).json({ valid: false, message: 'Missing required fields' });
-          }
+          if (!licenseKey || !username || !hwid) return res.status(400).json({ valid: false, message: 'Missing required fields' });
           const licensesRef = db.ref('licenses');
           const snapshot = await licensesRef.orderByChild('licenseKey').equalTo(licenseKey).once('value');
-          if (!snapshot.exists()) {
-            log('Invalid license key', { licenseKey });
-            return res.status(404).json({ valid: false, message: 'Неверный лицензионный ключ' });
-          }
+          if (!snapshot.exists()) return res.status(404).json({ valid: false, message: 'Неверный лицензионный ключ' });
           const licenses = snapshot.val();
           const licenseId = Object.keys(licenses)[0];
           const license = licenses[licenseId];
-          if (license.username !== username) {
-            log('License linked to different user', { licenseKey, username, storedUsername: license.username });
-            return res.status(403).json({ valid: false, message: 'Ключ привязан к другому пользователю' });
-          }
-          if (license.active_hwid && license.active_hwid !== hwid) {
-            log('License already in use on another device', { licenseKey, hwid, activeHwid: license.active_hwid });
-            return res.status(403).json({ valid: false, message: 'Вы уже играете на другом компьютере!' });
-          }
-          log('Updating license status', { licenseKey, hwid });
+          if (license.username !== username) return res.status(403).json({ valid: false, message: 'Ключ привязан к другому пользователю' });
+          if (license.active_hwid && license.active_hwid !== hwid) return res.status(403).json({ valid: false, message: 'Вы уже играете на другом компьютере!' });
           await licensesRef.child(licenseId).update({
             last_login: Date.now(),
             active_hwid: hwid
           });
-          log('License verified successfully', { licenseKey, telegramId: license.telegramId });
           res.status(200).json({ valid: true, telegramId: license.telegramId, message: 'Лицензия проверена' });
           break;
         }
         default:
-          log('Invalid action', { action });
           res.status(400).json({ error: 'Invalid action' });
       }
     } else {
-      log('Method not allowed', { method: req.method });
       res.status(405).json({ error: 'Method Not Allowed' });
     }
   } catch (error) {
-    log('Error in client API', { error: error.message, stack: error.stack });
+    console.error('Error in client API:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
