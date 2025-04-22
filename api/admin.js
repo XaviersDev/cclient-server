@@ -1,5 +1,4 @@
 const admin = require('firebase-admin');
-const fs = require('fs');
 
 if (!admin.apps.length) {
   const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -10,34 +9,15 @@ if (!admin.apps.length) {
 }
 
 module.exports = async (req, res) => {
-  const log = (message, data = {}) => {
-    const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] ${message} ${JSON.stringify(data)}\n`;
-    fs.appendFileSync('admin.log', logEntry);
-    console.log(logEntry);
-  };
-
-  log('Received request', { method: req.method, body: req.body });
-
-  if (req.method !== 'POST') {
-    log('Method not allowed', { method: req.method });
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   const { action, apiPassword } = req.body;
-  if (!apiPassword || apiPassword !== process.env.APIPASSWORD) {
-    log('Unauthorized access attempt', { action });
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  if (!apiPassword || apiPassword !== process.env.APIPASSWORD) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const db = admin.database();
-    log('Processing action', { action });
     switch (action) {
       case 'createSubscription': {
         const { telegramId, durationDays } = req.body;
-        if (!telegramId || !durationDays) {
-          log('Missing required fields for createSubscription', { telegramId, durationDays });
-          return res.status(400).json({ error: 'Missing required fields' });
-        }
+        if (!telegramId || !durationDays) return res.status(400).json({ error: 'Missing required fields' });
         const now = Date.now();
         const subscriptionsSnapshot = await db.ref('subscriptions').orderByChild('telegramId').equalTo(telegramId).once('value');
         let subscriptionId = null;
@@ -52,11 +32,9 @@ module.exports = async (req, res) => {
           });
         }
         if (subscriptionId) {
-          log('Updating existing subscription', { subscriptionId, telegramId, endTime });
           await db.ref(`subscriptions/${subscriptionId}`).update({ endTime: endTime });
         } else {
           const newSubRef = db.ref('subscriptions').push();
-          log('Creating new subscription', { subscriptionId: newSubRef.key, telegramId, endTime });
           await newSubRef.set({
             telegramId: telegramId,
             startTime: now,
@@ -65,23 +43,15 @@ module.exports = async (req, res) => {
           });
           subscriptionId = newSubRef.key;
         }
-        log('Subscription processed successfully', { telegramId, endTime });
         res.status(200).json({ success: true, endTime: endTime });
         break;
       }
       case 'registerLicense': {
         const { licenseKey, username, telegramId } = req.body;
-        if (!licenseKey || !username || !telegramId) {
-          log('Missing required fields for registerLicense', { licenseKey, username, telegramId });
-          return res.status(400).json({ error: 'Missing required fields' });
-        }
+        if (!licenseKey || !username || !telegramId) return res.status(400).json({ error: 'Missing required fields' });
         const licensesRef = db.ref('licenses');
         const snapshot = await licensesRef.orderByChild('licenseKey').equalTo(licenseKey).once('value');
-        if (snapshot.exists()) {
-          log('License key already exists', { licenseKey });
-          return res.status(409).json({ success: false, message: 'Ключ уже существует' });
-        }
-        log('Registering new license', { licenseKey, username, telegramId });
+        if (snapshot.exists()) return res.status(409).json({ success: false, message: 'Ключ уже существует' });
         await licensesRef.push({
           licenseKey,
           username,
@@ -89,7 +59,6 @@ module.exports = async (req, res) => {
           created_at: Date.now(),
           active: true
         });
-        log('License registered successfully', { licenseKey });
         res.status(200).json({ success: true, message: 'Лицензия зарегистрирована' });
         break;
       }
@@ -141,7 +110,6 @@ module.exports = async (req, res) => {
           });
           await db.ref().update(updates);
         }
-        log('Cleaned expired data', { authRequestsDeleted, subscriptionsDeleted, logsDeleted, accessCodesDeleted });
         res.status(200).json({
           success: true,
           authRequestsDeleted,
@@ -153,30 +121,21 @@ module.exports = async (req, res) => {
       }
       case 'updateAuthStatus': {
         const { requestId, status } = req.body;
-        if (!requestId || !status || !['approved', 'denied'].includes(status)) {
-          log('Missing or invalid fields for updateAuthStatus', { requestId, status });
-          return res.status(400).json({ error: 'Missing or invalid fields' });
-        }
+        if (!requestId || !status || !['approved', 'denied'].includes(status)) return res.status(400).json({ error: 'Missing or invalid fields' });
         const authRequestSnapshot = await db.ref(`authRequests/${requestId}`).once('value');
-        if (!authRequestSnapshot.exists()) {
-          log('Auth request not found', { requestId });
-          return res.status(404).json({ error: 'Request not found' });
-        }
-        log('Updating auth status', { requestId, status });
+        if (!authRequestSnapshot.exists()) return res.status(404).json({ error: 'Request not found' });
         await db.ref(`authRequests/${requestId}`).update({
           status,
           completedAt: admin.database.ServerValue.TIMESTAMP
         });
-        log('Auth status updated successfully', { requestId, status });
         res.status(200).json({ success: true, status });
         break;
       }
       default:
-        log('Invalid action', { action });
         res.status(400).json({ error: 'Invalid action' });
     }
   } catch (error) {
-    log('Error in admin API', { error: error.message, stack: error.stack });
+    console.error('Error in admin API:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
