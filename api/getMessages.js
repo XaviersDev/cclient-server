@@ -1,4 +1,4 @@
-// api/getMessages.js
+
 
 const admin = require('firebase-admin');
 
@@ -21,7 +21,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Ожидаем query параметр "user" (например, ?user=YourUsername)
+    
     const user = req.query.user;
     if (!user) {
       res.status(400).json({ error: 'Missing query parameter: user' });
@@ -31,7 +31,7 @@ module.exports = async (req, res) => {
     const db = admin.database();
     const messagesRef = db.ref('messages');
 
-    // Получаем сообщения, где поле "to" равно значению user
+    
     const snapshot = await messagesRef.orderByChild('to').equalTo(user).once('value');
     const messages = snapshot.val() || {};
 
