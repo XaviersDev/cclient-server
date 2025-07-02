@@ -1,14 +1,14 @@
-// api/sendMessage.js
+
 
 const admin = require('firebase-admin');
 
-// Инициализация firebase-admin (однократно)
+
 if (!admin.apps.length) {
   try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
-      databaseURL: process.env.FIREBASE_URL // Пример: "https://your-database.firebaseio.com/"
+      databaseURL: process.env.FIREBASE_URL 
     });
   } catch (error) {
     console.error("Ошибка инициализации Firebase Admin:", error);
@@ -22,7 +22,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Ожидаем JSON с полями: from, to, content
+    
     const { from, to, content } = req.body;
     if (!from || !to || !content) {
       res.status(400).json({ error: 'Missing required fields: from, to, content' });
@@ -32,7 +32,7 @@ module.exports = async (req, res) => {
     const db = admin.database();
     const messagesRef = db.ref('messages');
 
-    // Формируем объект сообщения
+    
     const messageData = {
       from,
       to,
